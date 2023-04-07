@@ -545,15 +545,389 @@ plot_cells(cds_from_seurat,
            graph_label_size=4)
 ```
 
+## Pathway Enrichment Test 
+I believe the escape is an extremely useful package to calculate enrichment scores for each single cell. The beauty of this tool is that you can project the enrichment score in FeaturePlot so you can practically localize enrichment area as well. Anyhow, if you are interested, please refer to the github <https://github.com/ncborcherding/escape> or BioConductor Turorial page <http://bioconductor.org/packages/devel/bioc/vignettes/escape/inst/doc/vignette.html>. By the way, the whole pathway panel enrichment is extremely resource intensive and will take long. So you can select the pathways of interest as well. For our data, we ran the whole panel anyway but if you wish to do it, plan it wisely. We have done this analysis in beta cell subcluster only, so the name of the Seurat object is betaonly, and subcluster information is under betaonly@meta.data$subtype.
+
+
+```c
+
+library(escape)
+library(dittoSeq)
+library(SingleCellExperiment)
+library(Seurat)
+library(GSEABase)
+
+# Getting Gene Set
+
+GS.hallmark <- getGeneSets(library = "C")
+GS.C2 <- getGeneSets(species="Homo sapiens",library="C2")
+GS.C5 <- getGeneSets(species="Homo sapiens",library="C5")
+
+ES.seurat <- enrichIt(obj = betaonly, gene.sets = GS.C2, groups = 1000, cores = 36)
+ES.seurat <- enrichIt(obj = betaonly, gene.sets = GS.C5, groups = 1000, cores = 36)
+
+# Add enrichment score to metadata section 
+betaonly <- Seurat::AddMetaData(betaonly, ES.seurat)
+
+
+colors <- colorRampPalette(c("#0348A6", "#7AC5FF", "#C6FDEC", "#FFB433", "#FF4B20"))
+
+#This may take  long
+dittoHeatmap(betaonly, genes = NULL, metas = names('your_desired_pathway_name'), 
+             annot.by = "subtype", 
+             fontsize = 7, 
+             cluster_cols = TRUE,
+             heatmap.colors = colors(50))
+
+
+ES2 <- data.frame(betaonly[[]], Idents(betaonly))
+colnames(ES2)[ncol(ES2)] <- "cluster"
+
+## plot
+ridgeEnrichment(ES2, gene.set = "YOUR_PATHWAY_NAME", group = "sub1", add.rug = TRUE)
+
+
+# The fitting can be done by different statistical model, refer to the tutorial link. 
+output <- getSignificance(ES2, group = "cluster", fit = "linear.model")
+```
+
+## RNA Velocity - Loom File Creation  
+First you need Loom file for each data, and you can get this by running velocyto algorithm in shell. For detailed tutorail for Velocyto, please refer to the <https://velocyto.org/velocyto.py/tutorial/cli.html>. 
+
+```c
+# Run this code in shell. 
+velocyto run10x /your_data_folder /your_reference_folder/genes/genes.gtf -m /folder_contains_mask_file/grch38_rmsk.gtf
+```
+
+## RNA Velocity - scVelo
+Sam Morivato shared excellent analysis pipeline, so check out his original script for doing this <https://smorabit.github.io/tutorials/8_velocyto/>. There is way to doing this from integrated Seurat with greater convenience, but I used following analysis pipeline for the publication . 
+
+```c
+import anndata
+import scvelo as scv
+import pandas as pd
+import numpy as np
+import matplotlib as plt
+
+sample_2c = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B2C/velocyto/B2C.loom")
+sample_2n = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B2N/velocyto/B2N.loom")
+sample_3c = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B3C/velocyto/B3C.loom")
+sample_3n = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B3N/velocyto/B3N.loom")
+sample_5c = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B5C/velocyto/B5C.loom")
+sample_5n = anndata.read_loom("/media/randy/Expansion/H5/SCvsSN/B5N/velocyto/B5N.loom")
+
+
+sample_obs = pd.read_csv("your_cell_id_info.csv")
+umap_cord = pd.read_csv("your_umap_coordinate_info.csv")
+cell_clusters = pd.read_csv("your_cluster_naming_info.csv")
+```
+
+## Barcode Info & Loom 
+set up the cell-id (barcode) info and adjust the string names for AnnData. 
+```c
+### B2C
+sample_obs = sample_obs.rename(columns = {'x':'CellID'})
+
+
+cellID_obs_B2C = sample_obs[sample_obs['CellID'].str.contains("-1_1")]
+
+
+cellID_obs_B2C.CellID = "B2C:" + cellID_obs_B2C.CellID 
+cellID_obs_B2C= cellID_obs_B2C["CellID"].str.replace("-1_1","x")
+
+sample_2c = sample_2c[np.isin(sample_2c.obs.index,cellID_obs_B2C)]
+
+
+### B3C
+
+cellID_obs_B3C = sample_obs[sample_obs['CellID'].str.contains("-1_2")]
+
+
+cellID_obs_B3C.CellID = "B3C:" + cellID_obs_B3C.CellID 
+cellID_obs_B3C= cellID_obs_B3C["CellID"].str.replace("-1_2","x")
+
+sample_3c = sample_3c[np.isin(sample_3c.obs.index,cellID_obs_B3C)]
+
+
+### B5C
+
+
+cellID_obs_B5C = sample_obs[sample_obs['CellID'].str.contains("-1_3")]
+
+
+cellID_obs_B5C.CellID = "B5C:" + cellID_obs_B5C.CellID 
+cellID_obs_B5C= cellID_obs_B5C["CellID"].str.replace("-1_3","x")
+
+sample_5c = sample_5c[np.isin(sample_5c.obs.index,cellID_obs_B5C)]
+
+
+### B2N 
+
+
+
+cellID_obs_B2N = sample_obs[sample_obs['CellID'].str.contains("-1_4")]
+
+
+cellID_obs_B2N.CellID = "B2N:" + cellID_obs_B2N.CellID 
+cellID_obs_B2N= cellID_obs_B2N["CellID"].str.replace("-1_4","x")
+
+sample_2n = sample_2n[np.isin(sample_2n.obs.index,cellID_obs_B2N)]
+
+# B3N
+
+
+
+cellID_obs_B3N = sample_obs[sample_obs['CellID'].str.contains("-1_5")]
+
+
+cellID_obs_B3N.CellID = "B3N:" + cellID_obs_B3N.CellID 
+cellID_obs_B3N= cellID_obs_B3N["CellID"].str.replace("-1_5","x")
+
+sample_3n = sample_3n[np.isin(sample_3n.obs.index,cellID_obs_B3N)]
+
+
+#B5N
+
+
+cellID_obs_B5N = sample_obs[sample_obs['CellID'].str.contains("-1_6")]
+
+
+cellID_obs_B5N.CellID = "B5N:" + cellID_obs_B5N.CellID 
+cellID_obs_B5N= cellID_obs_B5N["CellID"].str.replace("-1_6","x")
+
+sample_5n = sample_5n[np.isin(sample_5n.obs.index,cellID_obs_B5N)]
+
+
+
+sample_2c.var_names_make_unique()
+sample_3c.var_names_make_unique()
+sample_5c.var_names_make_unique()
+
+sample_2n.var_names_make_unique()
+sample_3n.var_names_make_unique()
+sample_5n.var_names_make_unique()
+
+seurat_merged = sample_2c.concatenate(sample_3c, sample_5c,sample_2n,sample_3n, sample_5n)
+
+seurat_cell = sample_2c.concatenate(sample_3c, sample_5c)
+seurat_nuclear = sample_2n.concatenate(sample_3n, sample_5n)
+```
+
+## UMAP Coordinate & Cluster info
+```c
+
+umap_coord_B2C = umap_cord[umap_cord['CellID'].str.contains("-1_1")]
+umap_coord_B3C = umap_cord[umap_cord['CellID'].str.contains("-1_2")]
+umap_coord_B5C = umap_cord[umap_cord['CellID'].str.contains("-1_3")]
+umap_coord_B2N = umap_cord[umap_cord['CellID'].str.contains("-1_4")]
+umap_coord_B3N = umap_cord[umap_cord['CellID'].str.contains("-1_5")]
+umap_coord_B5N = umap_cord[umap_cord['CellID'].str.contains("-1_6")]
+
+### The Numbering disrupted by the python, so don't panic. #################################################
+
+umap_coord_B2C.CellID = "B2C:" + umap_coord_B2C.CellID 
+umap_coord_B2C.CellID = umap_coord_B2C["CellID"].str.replace("-1_1","x-0")
+
+
+umap_coord_B3C.CellID = "B3C:" + umap_coord_B3C.CellID 
+umap_coord_B3C.CellID = umap_coord_B3C["CellID"].str.replace("-1_2","x-1")
+
+
+umap_coord_B5C.CellID = "B5C:" + umap_coord_B5C.CellID 
+umap_coord_B5C.CellID = umap_coord_B5C["CellID"].str.replace("-1_3","x-2")
 
 
 
 
-  
+
+umap_coord_B2N.CellID = "B2N:" + umap_coord_B2N.CellID 
+umap_coord_B2N.CellID = umap_coord_B2N["CellID"].str.replace("-1_4","x-3")
+
+
+umap_coord_B3N.CellID = "B3N:" + umap_coord_B3N.CellID 
+umap_coord_B3N.CellID = umap_coord_B3N["CellID"].str.replace("-1_5","x-4")
+
+
+umap_coord_B5N.CellID = "B5N:" + umap_coord_B5N.CellID 
+umap_coord_B5N.CellID = umap_coord_B5N["CellID"].str.replace("-1_6","x-5")
+
+umap_merged = pd.concat([umap_coord_B2C,umap_coord_B2N, umap_coord_B3C, umap_coord_B3N, umap_coord_B5C, umap_coord_B5N])
+
+
+umap_cell = pd.concat([umap_coord_B2C, umap_coord_B3C,  umap_coord_B5C])
+umap_nuclear = pd.concat([umap_coord_B2N, umap_coord_B3N, umap_coord_B5N])
+
+
+
+
+### Extract Index 
+
+merged_seurat_index = pd.DataFrame(seurat_merged.obs.index)
+
+seurat_cell_index = pd.DataFrame(seurat_cell.obs.index)
+seurat_nuclear_index = pd.DataFrame(seurat_nuclear.obs.index)
+
+
+
+
+# Merging UMAP data to the Sample 1 Index
+
+umap_ordered = merged_seurat_index.merge(umap_merged, on = "CellID")
+
+
+
+umap_cell_ordered = seurat_cell_index.merge(umap_cell, on="CellID")
+umap_nuclear_ordered = seurat_nuclear_index.merge(umap_cell, on="CellID")
+
+
+
+### rematch index for umap 
+
+umap_nuclear.CellID = umap_nuclear["CellID"].str.replace("x-3","x-0")
+umap_nuclear.CellID = umap_nuclear["CellID"].str.replace("x-4","x-1")
+umap_nuclear.CellID = umap_nuclear["CellID"].str.replace("x-5","x-2")
+
+
+
+umap_nuclear_ordered = seurat_nuclear_index.merge(umap_nuclear, on="CellID")
+
+
+
+
+umap_ordered = umap_ordered.iloc[:,1:]
+
+umap_cell_ordered = umap_cell_ordered.iloc[:,1:]
+umap_nuclear_ordered = umap_nuclear_ordered.iloc[:,1:]
+
+
+
+
+seurat_merged.obsm['X_umap'] = umap_ordered.values
+seurat_cell.obsm['X_umap'] = umap_cell_ordered.values
+seurat_nuclear.obsm['X_umap'] = umap_nuclear_ordered.values
 
 
 
 
 
+#### Cell Type Annotation  
+
+#### Renaming the cell ID Index
 
 
+cell_clusters = cell_clusters.rename(columns = {'Unnamed: 0':'CellID'})
+
+
+cluster_b2c = cell_clusters[cell_clusters['CellID'].str.contains("-1_1")]
+cluster_b3c = cell_clusters[cell_clusters['CellID'].str.contains("-1_2")]
+cluster_b5c = cell_clusters[cell_clusters['CellID'].str.contains("-1_3")]
+cluster_b2n = cell_clusters[cell_clusters['CellID'].str.contains("-1_4")]
+cluster_b3n = cell_clusters[cell_clusters['CellID'].str.contains("-1_5")]
+cluster_b5n = cell_clusters[cell_clusters['CellID'].str.contains("-1_6")]
+
+
+cluster_b2c.CellID = "B2C:" + cluster_b2c.CellID 
+cluster_b2c.CellID = cluster_b2c["CellID"].str.replace("-1_1","x-0")
+
+cluster_b3c.CellID = "B3C:" + cluster_b3c.CellID 
+cluster_b3c.CellID = cluster_b3c["CellID"].str.replace("-1_2","x-1")
+
+cluster_b5c.CellID = "B5C:" + cluster_b5c.CellID 
+cluster_b5c.CellID = cluster_b5c["CellID"].str.replace("-1_3","x-2")
+
+cluster_b2n.CellID = "B2N:" + cluster_b2n.CellID 
+cluster_b2n.CellID = cluster_b2n["CellID"].str.replace("-1_4","x-3")
+
+
+cluster_b3n.CellID = "B3N:" + cluster_b3n.CellID 
+cluster_b3n.CellID = cluster_b3n["CellID"].str.replace("-1_5","x-4")
+
+cluster_b5n.CellID = "B5N:" + cluster_b5n.CellID 
+cluster_b5n.CellID = cluster_b5n["CellID"].str.replace("-1_6","x-5")
+
+
+
+cluster_merged = pd.concat([cluster_b2c,cluster_b3c, cluster_b5c, cluster_b2n,cluster_b3n,cluster_b5n])
+
+cluster_cell = pd.concat([cluster_b2c,cluster_b3c, cluster_b5c])
+cluster_nuclear = pd.concat([cluster_b2n,cluster_b3n, cluster_b5n])
+
+
+
+
+#### Rename Nuclear Clusters 
+
+cluster_nuclear.CellID = cluster_nuclear["CellID"].str.replace("x-3","x-0")
+cluster_nuclear.CellID = cluster_nuclear["CellID"].str.replace("x-4","x-1")
+cluster_nuclear.CellID = cluster_nuclear["CellID"].str.replace("x-5","x-2")
+
+
+
+## if you just merge by sample one index, you will pick up sample 1 only
+cluster_merged = merged_seurat_index.merge(cluster_merged, on = "CellID")
+cluster_cell_merged = seurat_cell_index.merge(cluster_cell, on = "CellID")
+cluster_nuclear_merged = seurat_nuclear_index.merge(cluster_nuclear, on = "CellID")
+
+
+cluster_ordered = cluster_merged.iloc[:,1]
+
+cell_ordered = cluster_cell_merged.iloc[:,1]
+
+nuclear_ordered = cluster_nuclear_merged.iloc[:,1]
+```
+
+## Now, add values to the clusters 
+```c
+seurat_merged.obs['cluster'] = cluster_ordered.values
+
+seurat_cell.obs['cluster'] = cell_ordered.values
+seurat_nuclear.obs['cluster'] = nuclear_ordered.values
+
+
+
+
+seurat_merged.uns['clusters'] = cluster_ordered.values
+seurat_merged.uns['cluster_colors'] = cluster_ordered.values
+
+
+
+
+
+seurat_cell.uns['clusters'] = cluster_cell.values
+seurat_cell.uns['cluster_colors'] = cluster_cell.values
+
+
+
+seurat_nuclear.uns['clusters'] = cluster_nuclear.values
+seurat_nuclear.uns['cluster_colors'] = cluster_nuclear.values
+
+```
+## Modeling & Visualization 
+```c
+scv.pp.filter_and_normalize(seurat_merged)
+scv.pp.moments(seurat_merged)
+scv.tl.velocity(seurat_merged, mode = "stochastic")
+
+scv.tl.velocity_graph(seurat_merged)
+scv.pl.velocity_embedding(seurat_merged, basis = 'umap')
+
+#scv.pl.scatter(seurat_merged, color="cluster", palette={'beta_1': 'red', 'beta_2': 'blue', 'beta_3': 'green'})
+
+
+
+scv.pl.proportions(seurat_merged, groupby="cluster")
+
+
+scv.pl.proportions(seurat_cell, groupby="cluster") 
+scv.pl.proportions(seurat_nuclear, groupby="cluster")
+
+
+scv.pl.velocity_embedding_stream(seurat_merged, basis='umap', color='cluster')
+
+scv.pl.velocity_embedding_stream(seurat_cell, basis='umap', color='cluster', title='scRNA')
+scv.pl.velocity_embedding_stream(seurat_nuclear, basis='umap', color='cluster', title='snRNA')
+
+
+
+scv.pl.velocity_embedding(seurat_merged, arrow_length=3, arrow_size=2, dpi=120, color='cluster')
+```
