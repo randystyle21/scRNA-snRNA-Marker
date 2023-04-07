@@ -460,6 +460,95 @@ my_function <- function(celltype) {
 lapply(seurat_celltype_list, my_function)
 ```
 
+## Internal Referencing 
+If you have your own reference like this study, you can simply do the reference based anntation & clustering as well 
+```c
+
+DefaultAssay(seurat_ingrated) <-"SCT"
+DefaultAssay(seurat_vivo) <-"SCT"
+
+
+anchors <- FindTransferAnchors(reference = seurat_ingrated, query=seurat_vivo, 
+                               reference.reduction = "pca", normalization.method = "SCT",
+                               reference.assay= "SCT", query.assay="SCT",recompute.residuals =FALSE, 
+                               features=rownames(seurat_ingrated[["SCT"]])) 
+
+
+seurat_vivo <- MapQuery(anchorset = anchors, reference = seurat_ingrated, 
+                              query = seurat_vivo, 
+                              refdata = list(celltype = "celltype"), reference.reduction = "pca", 
+                              reduction.model = "umap") 
+```
+## Monocle 3 Pseudotime Analysis with Seurat Object 
+```c
+
+library(Signac)
+library(Seurat)
+library(SeuratWrappers)
+library(monocle3)
+library(Matrix)
+library(ggplot2)
+library(patchwork)
+set.seed(1234)
+
+gene_annotation <- as.data.frame(rownames(betaonly@reductions[["pca"]]@feature.loadings),
+                                 row.names = rownames(betaonly@reductions[["pca"]]@feature.loadings))
+colnames(gene_annotation) <- "gene_short_name"
+
+
+cell_metadata <- as.data.frame(betaonly@assays[["RNA"]]@counts@Dimnames[[2]],
+                               row.names = betaonly@assays[["RNA"]]@counts@Dimnames[[2]])
+colnames(cell_metadata) <- "barcode"
+
+
+New_matrix <- betaonly@assays[["RNA"]]@counts
+New_matrix <- New_matrix[rownames(betaonly@reductions[["pca"]]@feature.loadings), ]
+expression_matrix <- New_matrix
+
+library(monocle3)
+
+cds_from_seurat <- new_cell_data_set(expression_matrix,
+                                     cell_metadata = cell_metadata,
+                                     gene_metadata = gene_annotation)
+
+
+recreate.partition <- c(rep(1, length(cds_from_seurat@colData@rownames)))
+names(recreate.partition) <- cds_from_seurat@colData@rownames
+recreate.partition <- as.factor(recreate.partition)
+
+cds_from_seurat@clusters@listData[["UMAP"]][["partitions"]] <- recreate.partition
+
+
+
+list_cluster <- betaonly@active.ident
+names(list_cluster) <- betaonly@assays[["RNA"]]@data@Dimnames[[2]]
+
+cds_from_seurat@clusters@listData[["UMAP"]][["clusters"]] <- list_cluster
+
+
+
+cds_from_seurat@clusters@listData[["UMAP"]][["louvain_res"]] <- "NA"
+
+
+cds_from_seurat@int_colData@listData$reducedDims@listData[["UMAP"]] <-betaonly@reductions[["umap"]]@cell.embeddings
+
+
+cds_from_seurat@preprocess_aux$gene_loadings <- betaonly@reductions[["pca"]]@feature.loadings
+
+cds_from_seurat <- learn_graph(cds_from_seurat, use_partition = F)
+
+plot_cells(cds_from_seurat, 
+           color_cells_by = 'cluster',
+           label_groups_by_cluster=TRUE,
+           label_leaves=FALSE,
+           label_branch_points=TRUE,
+           graph_label_size=4)
+```
+
+
+
+
+
   
 
 
