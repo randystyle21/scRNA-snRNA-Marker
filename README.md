@@ -262,10 +262,205 @@ So, now we can create the cluster with different Louvain resolution. You can sim
   Idents(object = seurat_integrated) <- "integrated_snn_res.your_desired_resolution"
   
   
+## Azimuth Reference Clustering & Label 
+Azimuth is an excellent tool to project your data to publically available reference, especially when you created the data with Seurat. Yet, the online based app didn't allow to upload large sized integrated data at the moment of this research. Instead, I have downloaded the analysis script template which is provided when you do the analysis with the app. You can download it with the same way from <https://app.azimuth.hubmapconsortium.org/app/human-pancreas>
+```c
+
+  ############# Azimuth
+  library(Seurat)
+  library(glmGamPoi)
+  library(Azimuth)
+  # Load helper functions from Azimuth
+  
+  source("https://raw.githubusercontent.com/satijalab/azimuth/master/R/helpers.R")
+  
+  # Download the Azimuth reference and extract the archive
+  
+  # Load the reference
+  ```
+  
+  This loading reference function may or maynot work with your own platform. It functions well with Azimuth app, but this link doesn't work time to time. 
+  ```c
+  # Change the file path based on where the reference is located on your system.
+  reference <- Azimuth:::LoadReference(path = "https://seurat.nygenome.org/azimuth/references/v1.0.0/human_pancreas")
+
+   
+  # Preprocess with SCTransform
+  seurat_integrated <- SCTransform(
+    object = seurat_integrated,
+    assay = "RNA",
+    new.assay.name = "refAssay",
+    residual.features = rownames(x = reference$map),
+    reference.SCT.model = reference$map[["refAssay"]]@SCTModel.list$refmodel,
+    method = 'glmGamPoi',
+    n_cells=2000,
+    n_genes = 2000,
+    do.correct.umi = FALSE,
+    do.scale = FALSE,
+    do.center = TRUE
+  )
+  
+  
+  
+  features = intersect(rownames(x = reference$map), VariableFeatures(object = seurat_integrated))
+  
+  # Find anchors between query and reference
+  anchors <- FindTransferAnchors(
+    reference = reference$map,
+    query = seurat_integrated,
+    k.filter = NA,
+    reference.neighbors = "refdr.annoy.neighbors",
+    reference.assay = "refAssay",
+    query.assay = "refAssay",
+    reference.reduction = "refDR",
+    normalization.method = "SCT",
+    features = features,
+    dims = 1:50,
+    n.trees = 20,
+    mapping.score.k = 100
+  )
+  
+  
+  refdata <- lapply(X = "annotation.l1", function(x) {
+    reference$map[[x, drop = TRUE]]
+  })
+  names(x = refdata) <- "annotation.l1"
+  if (FALSE) {
+    refdata[["impADT"]] <- GetAssayData(
+      object = reference$map[['ADT']],
+      slot = 'data'
+    )
+  }
+  
+  
+  seurat_integrated <- TransferData(
+    reference = reference$map,
+    query = seurat_integrated,
+    dims = 1:50,
+    anchorset = anchors,
+    refdata = refdata,
+    n.trees = 20,
+    store.weights = TRUE
+  )
+  
+  # Calculate the embeddings of the query data on the reference SPCA
+  seurat_integrated <- IntegrateEmbeddings(
+    anchorset = anchors,
+    reference = reference$map,
+    query = seurat_integrated,
+    reductions = "pcaproject",
+    reuse.weights.matrix = TRUE
+  )
+  
+  # Calculate the query neighbors in the reference
+  # with respect to the vitro embeddings
+  seurat_integrated[["query_ref.nn"]] <- FindNeighbors(
+    object = Embeddings(reference$map[["refDR"]]),
+    query = Embeddings(seurat_integrated[["integrated_dr"]]),
+    return.neighbor = TRUE,
+    l2.norm = TRUE
+  )
+  
+  # The reference used in the app is downsampled compared to the reference on which
+  # the UMAP model was computed. This step, using the helper function NNTransform,
+  # corrects the Neighbors to account for the downsampling.
+  seurat_integrated <- Azimuth:::NNTransform(
+    object = seurat_integrated,
+    meta.data = reference$map[[]]
+  )
+  
+  # Project the query to the reference UMAP.
+  seurat_integrated[["proj.umap"]] <- RunUMAP(
+    object = seurat_integrated[["query_ref.nn"]],
+    reduction.model = reference$map[["refUMAP"]],
+    reduction.key = 'UMAP_'
+  )
+  
+  
+  # Calculate mapping score and add to metadata
+  seurat_integrated <- AddMetaData(
+    object = seurat_integrated,
+    metadata = MappingScore(anchors = anchors),
+    col.name = "mapping.score"
+  )
+  
+  
+  # First predicted metadata field, change to visualize other predicted metadata
+  id <- "annotation.l1"[1]
+  predicted.id <- paste0("predicted.", id)
+  ```
+
+
+# Apply the function to each element of the list
+lapply(alpha_glucose_celltype, my_function)
 
 
 
+## Primary Visualization 
+I believe visualization is one of the most demending part for the journal publication, ironically. Anyhow, here is the sample for figures.
+markers can be tailor made according to your data set yet I will share it here as well. Many markers are also obtained from Azimuth pancreatic islet reference, which contains datas from very prominent publications.  
 
+```c
+alphacell <- c("GCG","TTR","CRYBA2","SCG2")
+betacell <- c("INS","IAPP","MAFA","DLK1")
+deltacell <-c("SST","LY6H","LEPR","SYT1")
+PPcell <- c("PPY","MEIS2","ID2","AQP3")
+epsiloncell <-c("PHGR1","SPRN","UGT2B4","BHMT")
+cyclingcell <- c("CENPF","TOP2A","MKI67","NUSAP1")
+acinarcell <- c("REG1A","REG3A","PRSS1","CTRB2")
+accell <- c("COL1A1","COL1A2","TIMP3","IGFBP5")
+qscell <- c("RGS5","OLFML2A1","CSPG4","CCDC3")
+ductalcell <- c("CFTR","SPP1","MMP7","KRT7")
+immune <- c("CD3E","FCER1G","C1QB","CD68")
+endothelialcell <- c("PLVAP","ESM1","RGCC","PECAM1")
+schwanncell <- c("COL8A11","NGFR","CDH19","RUNX21","PLP1","PTPRZ1","DCT")
+mastcell <- c("TPSAB1","CPA3","KIT")
+
+
+
+allcellmarkers <- list("Alpha" = alphacell, "Beta" = betacell, "Delta" = deltacell, "PP" = PPcell, "Acinar" = acinarcell,
+                       "Ductal"=ductalcell, "Endo"=endothelialcell, "TMM"=immune, "Mast"=mastcell, "Schwann"=schwanncell, "AS"=accell,"QS"=qscell,"Cycling"=cyclingcell)
+
+
+nuclear_endomarkers <- list("Alpha"=c("PTPRT","FAP","PDK4","LOXL4"),
+                            "Beta"=c("ZNF385D","TRPM3","LRFN2","PLUT"),
+                            "Delta"=c("LRFN5","ADARB2","ERBB4","KCNT2"),
+                            "Gamma"=c("CNTNAP5","CACNA2D3","THSD7A","RBFOX3"))
+
+
+  levels(seurat_integrated) <- c("alpha","beta","delta","gamma",
+                              "acinar","ductal","endothelial","schwann","immune",
+                              "activated_stellate","quiescent_stellate")
+  
+  DotPlot(subset(seurat_integrated, idents=c("alpha","beta","delta","gamma")),scale.min=0, scale.max=100,
+          col.min=-2.5, col.max=2.5, features=nuclear_endomarkers) + scale_colour_gradient2(low = "darkblue", mid = "white", high = "red") +  
+    geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) + scale_colour_gradient2(low = "darkblue", mid = "white", high = "red") + 
+    theme(text = element_text(face = "bold"), 
+          axis.text.x=element_text(angle=45, hjust=1, size=10), 
+          axis.text.y=element_text(size=10)) + theme(panel.border=element_rect(color="darkgreen", fill=NA, size=2)) + 
+    ggtitle("Whatever Data Names", subtitle="Annotation = Azimuth")
+ ``` 
+ 
+
+## Identify Cell Type Markers from DEG 
+If you use Azimuth as your primary annotation resource, then cell type info is under meta.data$predicted.annotation.l1 in most of the cases, or you can change this any label that you have assigned. (Check out your seurat@met.data section.) If you run the 
+
+```c
+
+Idents(seurat_integrated) <- "predicted.annotation.l1"
+seurat_celltype_list <- levels(seurat_integrated)
+
+my_function <- function(celltype) {
+  FindMarkers(subset(seurat_integrated, predicted.celltype == celltype), ident.1=celltype,
+              ident.2=NULL) -> celltype_marker
+  write.csv(celltype_marker, file=paste0("./",celltype,"_marker.csv"))
+} 
+
+
+lapply(seurat_celltype_list, my_function)
+```
+
+  
 
 
 
