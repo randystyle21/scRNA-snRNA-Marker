@@ -191,7 +191,7 @@ If you want to keep it or used human/mouse only library then, you don't have to 
   
   # Integration 
   So, people performs phase control by cell cycle scoring. For detialed coding and logic behind of this, please refer to Seurat's original vignette <https://satijalab.org/seurat/articles/cell_cycle_vignette.html>. 
-  You can also download the file that you need for scoring from the link. Here, 
+  You can also download the file that you need for scoring from the link.  
   
   
   ```c
