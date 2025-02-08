@@ -172,7 +172,7 @@ If you want to keep it or used human/mouse only library then, you don't have to 
   
   #Parameter set up can be done from here. You can adjust the formation estimation according to your data set.
   ```c
-  nExp_poi <- round(0.15*nrow(filtered_seurat@meta.data))  ## Assuming 15% doublet formation rate - tailor for your dataset
+  nExp_poi <- round(0.20*nrow(filtered_seurat@meta.data))  ## Assuming 20% doublet formation rate - tailor for your dataset
   nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
   
   ## Run DoubletFinder with varying classification stringencies ----------------------------------------------------------------
